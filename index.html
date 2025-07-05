@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaWiki WikiText Table Live Preview Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8f9fa;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 300;
+        }
+        
+        .container {
+            flex: 1;
+            display: flex;
+            min-height: 0;
+        }
+        
+        .editor-panel, .preview-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+        
+        .panel-header {
+            background: #34495e;
+            color: white;
+            padding: 0.75rem 1rem;
+            font-weight: 500;
+            border-bottom: 1px solid #2c3e50;
+        }
+        
+        .editor-panel {
+            background: #2c3e50;
+            border-right: 1px solid #34495e;
+        }
+        
+        .preview-panel {
+            background: white;
+        }
+        
+        #editor {
+            flex: 1;
+            padding: 1rem;
+            border: none;
+            outline: none;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            background: #2c3e50;
+            color: #ecf0f1;
+            resize: none;
+            tab-size: 2;
+        }
+        
+        #preview {
+            flex: 1;
+            padding: 1rem;
+            overflow: auto;
+            background: white;
+        }
+        
+        /* MediaWiki table styling */
+        .wikitable {
+            border-collapse: collapse;
+            border: 1px solid #a2a9b1;
+            background: #f8f9fa;
+            color: #222;
+            margin: 1em 0;
+            width: 100%;
+            font-size: 14px;
+        }
+        
+        .wikitable th {
+            background: #eaecf0;
+            padding: 0.35em 0.65em;
+            border: 1px solid #a2a9b1;
+            font-weight: bold;
+            text-align: left;
+        }
+        
+        .wikitable td {
+            border: 1px solid #a2a9b1;
+            padding: 0.35em 0.65em;
+            vertical-align: top;
+        }
+        
+        .wikitable tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        .wikitable tr:nth-child(odd) {
+            background: #ffffff;
+        }
+        
+        .wikitable caption {
+            font-weight: bold;
+            padding: 0.5em;
+            background: #ccccff;
+            border: 1px solid #a2a9b1;
+            border-bottom: none;
+        }
+        
+        /* Sortable table styling */
+        .sortable th {
+            cursor: pointer;
+            position: relative;
+            padding-right: 20px;
+        }
+        
+        .sortable th:hover {
+            background: #ddd;
+        }
+        
+        /* Error styling */
+        .error {
+            color: #d32f2f;
+            background: #ffebee;
+            padding: 1rem;
+            border: 1px solid #ffcdd2;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            
+            .editor-panel {
+                border-right: none;
+                border-bottom: 1px solid #34495e;
+            }
+            
+            .editor-panel, .preview-panel {
+                min-height: 50vh;
+            }
+        }
+        
+        /* Toolbar */
+        .toolbar {
+            background: #34495e;
+            padding: 0.5rem 1rem;
+            display: flex;
+            gap: 0.5rem;
+            border-bottom: 1px solid #2c3e50;
+        }
+        
+        .toolbar button {
+            background: #7f8c8d;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .toolbar button:hover {
+            background: #95a5a6;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>MediaWiki Table Live Preview</h1>
+    </div>
+    
+    <div class="container">
+        <div class="editor-panel">
+            <div class="panel-header">MediaWiki Table Code</div>
+            <div class="toolbar">
+                <button onclick="insertSample()">Sample Table</button>
+                <button onclick="insertRow()">Add Row</button>
+                <button onclick="insertColumn()">Add Column</button>
+                <button onclick="formatTable()">Format</button>
+                <button onclick="clearEditor()">Clear</button>
+            </div>
+            <textarea id="editor" placeholder="Enter MediaWiki table markup here...
+
+Example:
+{| class=&quot;wikitable&quot;
+|-
+! Header 1
+! Header 2
+! Header 3
+|-
+| Cell 1
+| Cell 2
+| Cell 3
+|-
+| Cell 4
+| Cell 5
+| Cell 6
+|}"></textarea>
+        </div>
+        
+        <div class="preview-panel">
+            <div class="panel-header">Preview</div>
+            <div id="preview">
+                <p style="color: #666; font-style: italic;">Enter MediaWiki table markup in the editor to see the preview here.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const editor = document.getElementById('editor');
+        const preview = document.getElementById('preview');
+        
+        // Parse MediaWiki table syntax
+        function parseMediaWikiTable(markup) {
+            if (!markup.trim()) {
+                return '<p style="color: #666; font-style: italic;">Enter MediaWiki table markup in the editor to see the preview here.</p>';
+            }
+            
+            try {
+                let html = markup;
+                
+                // Replace table start
+                html = html.replace(/\{\|\s*([^|\n]*)/g, (match, attrs) => {
+                    const classAttr = attrs.includes('class=') ? attrs : `class="wikitable" ${attrs}`;
+                    return `<table ${classAttr}>`;
+                });
+                
+                // Replace table end
+                html = html.replace(/\|\}/g, '</table>');
+                
+                // Replace table rows
+                html = html.replace(/\|-([^|\n]*)/g, '<tr>');
+                
+                // Replace table headers
+                html = html.replace(/^!\s*([^|\n]*)/gm, '<th>$1</th>');
+                html = html.replace(/\|\|\s*([^|\n]*)/g, '</th><th>$1</th>');
+                html = html.replace(/!!\s*([^|\n]*)/g, '</th><th>$1</th>');
+                
+                // Replace table cells
+                html = html.replace(/^\|\s*([^|\n]*)/gm, '<td>$1</td>');
+                html = html.replace(/\|\|\s*([^|\n]*)/g, '</td><td>$1</td>');
+                
+                // Replace table captions
+                html = html.replace(/^\|\+\s*([^|\n]*)/gm, '<caption>$1</caption>');
+                
+                // Handle [url title] and [title] links
+                html = html.replace(/\[([^\]]+)\s+([^\]]+)\]/g, '<a href="$1" target="_blank">$2</a>');
+                html = html.replace(/\[([^\]]+)\]/g, '<a href="$1" target="_blank">$1</a>');
+                
+                // Clean up extra whitespace and line breaks
+                html = html.replace(/\n\s*\n/g, '\n');
+                html = html.replace(/\n(?!<)/g, '');
+                
+                // Close any unclosed tr tags
+                html = html.replace(/<tr>\s*(<t[hd])/g, '<tr>$1');
+                html = html.replace(/(<\/t[hd]>)\s*(?=<tr>|<\/table>)/g, '$1</tr>');
+                html = html.replace(/(<\/t[hd]>)\s*$/g, '$1</tr>');
+                
+                return html;
+            } catch (error) {
+                return `<div class="error">Error parsing table: ${error.message}</div>`;
+            }
+        }
+        
+        // Update preview
+        function updatePreview() {
+            const markup = editor.value;
+            const html = parseMediaWikiTable(markup);
+            preview.innerHTML = html;
+        }
+        
+        // Format table to put each cell on its own line
+        function formatTable() {
+            let markup = editor.value;
+            
+            if (!markup.trim()) {
+                return;
+            }
+            
+            // Split by lines and process each line
+            const lines = markup.split('\n');
+            let formattedLines = [];
+            
+            for (let line of lines) {
+                line = line.trim();
+                
+                // Skip empty lines and table boundaries
+                if (!line || line === '{|' || line.startsWith('{|') || line === '|}' || line === '|-' || line.startsWith('|+')) {
+                    formattedLines.push(line);
+                    continue;
+                }
+                
+                // Handle lines with multiple cells separated by ||
+                if (line.includes('||')) {
+                    // Split by || but preserve the first |
+                    const cells = line.split('||');
+                    const firstCell = cells[0]; // This includes the leading |
+                    
+                    formattedLines.push(firstCell);
+                    
+                    // Add remaining cells with proper | prefix
+                    for (let i = 1; i < cells.length; i++) {
+                        formattedLines.push('| ' + cells[i].trim());
+                    }
+                } else if (line.includes('!!')) {
+                    // Handle header cells
+                    const cells = line.split('!!');
+                    const firstCell = cells[0]; // This includes the leading !
+                    
+                    formattedLines.push(firstCell);
+                    
+                    // Add remaining cells with proper ! prefix
+                    for (let i = 1; i < cells.length; i++) {
+                        formattedLines.push('! ' + cells[i].trim());
+                    }
+                } else {
+                    // Single cell line, keep as is
+                    formattedLines.push(line);
+                }
+            }
+            
+            editor.value = formattedLines.join('\n');
+            updatePreview();
+        }
+        
+        // Insert sample table
+        function insertSample() {
+            const sampleTable = `{| class="wikitable"
+|+ Sample Table Caption
+|-
+! Name
+! Age
+! City
+! Website
+|-
+| John Doe
+| 30
+| New York
+| [https://johndoe.com John's Portfolio]
+|-
+| Jane Smith
+| 25
+| London
+| [https://janesmith.design]
+|-
+| Bob Johnson
+| 35
+| Tokyo
+| [https://bobjohnson.jp Bob's Site]
+|}`;
+            editor.value = sampleTable;
+            updatePreview();
+        }
+        
+        // Insert new row
+        function insertRow() {
+            const cursorPos = editor.selectionStart;
+            const textBefore = editor.value.substring(0, cursorPos);
+            const textAfter = editor.value.substring(cursorPos);
+            
+            const newRow = `|-
+| Cell 1
+| Cell 2
+| Cell 3
+`;
+            
+            editor.value = textBefore + newRow + textAfter;
+            editor.selectionStart = editor.selectionEnd = cursorPos + newRow.length;
+            editor.focus();
+            updatePreview();
+        }
+        
+        // Insert new column (add to current row)
+        function insertColumn() {
+            const cursorPos = editor.selectionStart;
+            const textBefore = editor.value.substring(0, cursorPos);
+            const textAfter = editor.value.substring(cursorPos);
+            
+            const newColumn = `
+| New Cell`;
+            
+            editor.value = textBefore + newColumn + textAfter;
+            editor.selectionStart = editor.selectionEnd = cursorPos + newColumn.length;
+            editor.focus();
+            updatePreview();
+        }
+        
+        // Clear editor
+        function clearEditor() {
+            editor.value = '';
+            updatePreview();
+            editor.focus();
+        }
+        
+        // Handle tab key in editor
+        editor.addEventListener('keydown', function(e) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const start = this.selectionStart;
+                const end = this.selectionEnd;
+                
+                this.value = this.value.substring(0, start) + '  ' + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + 2;
+            }
+        });
+        
+        // Live preview update
+        editor.addEventListener('input', updatePreview);
+        
+        // Initial preview
+        updatePreview();
+    </script>
+</body>
+</html>
